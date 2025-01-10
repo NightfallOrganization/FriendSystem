@@ -1,0 +1,5 @@
+[versions]
+velocity = "3.4.0-SNAPSHOT"
+
+[libraries]
+velocity-api = { group = "com.velocitypowered", name = "velocity-api", version.ref = "velocity" }
