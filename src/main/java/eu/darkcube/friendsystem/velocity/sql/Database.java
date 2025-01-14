@@ -59,10 +59,6 @@ public class Database {
         System.out.println(CREATE_TABLE_REQUESTS);
         var database = new Database(DatabaseConfig.DEFAULT);
         database.load();
-
-        database.sendRequest(
-                UUID.fromString("dba8a0b9-569a-4242-b56a-11a652aad209"),
-                UUID.fromString("3dac75df-f59d-4f20-9286-786f57780abf"));
     }
 
     private static final String TABLE_FRIENDS = "friendsystem_friends";
