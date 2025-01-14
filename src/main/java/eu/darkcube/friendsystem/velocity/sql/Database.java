@@ -8,9 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.*;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
 public class Database {
     private static final String CONNECT_URL_FORMAT = "jdbc:mariadb://%s:%d/%s?serverTimezone=UTC";
@@ -31,6 +29,7 @@ public class Database {
         hikariConfig.setUsername(config.username());
         hikariConfig.setPassword(config.password());
 
+        // Hikari-Einstellungen
         hikariConfig.addDataSourceProperty("cachePrepStmts", "true");
         hikariConfig.addDataSourceProperty("prepStmtCacheSize", "250");
         hikariConfig.addDataSourceProperty("prepStmtCacheSqlLimit", "2048");
@@ -57,53 +56,63 @@ public class Database {
         System.out.println(CREATE_TABLE_REQUESTS);
         var database = new Database(DatabaseConfig.DEFAULT);
         database.load();
-
-        database.sendRequest(
-                UUID.fromString("a6e88c41-68e5-4970-98e6-02c3671d9c1b"),
-                UUID.fromString("8dad1d4a-2129-4c49-b758-4138aecdf9fe"));
-
-//        database.sendRequest(
-//                UUID.fromString("8dad1d4a-2129-4c49-b758-4138aecdf9fe"),
-//                UUID.fromString("a6e88c41-68e5-4970-98e6-02c3671d9c1b"));
-
-
-//        List<UUID> list = database.getPlayerFriendlist(UUID.fromString("a6e88c41-68e5-4970-98e6-02c3671d9c1b"));
-//        System.out.println(list);
-
-//        database.removeFriend(UUID.fromString("a6e88c41-68e5-4970-98e6-02c3671d9c1b"), UUID.fromString("8dad1d4a-2129-4c49-b758-4138aecdf9fe"));
-//        database.addFriend(UUID.fromString("a6e88c41-68e5-4970-98e6-02c3671d9c1b"), UUID.randomUUID());
-
-//        database.hikariConnection().createStatement().execute(CREATE_ROW_REQUESTS);
-//        database.hikariConnection().createStatement().execute(DELETE_ROW_REQUESTS);
     }
 
     private static final String TABLE_FRIENDS = "friendsystem_friends";
     private static final String TABLE_REQUESTS = "friendsystem_requests";
 
-    private static final String CREATE_TABLE_FRIENDS = "CREATE TABLE IF NOT EXISTS `" + TABLE_FRIENDS + "` (`person1` VARCHAR(36) NOT NULL, `person2` VARCHAR(36) NOT NULL, `sorted` VARCHAR(73) AS (CONCAT(LEAST(`person1`, `person2`), '-', GREATEST(`person1`, `person2`))) STORED INVISIBLE UNIQUE)";
+    private static final String CREATE_TABLE_FRIENDS =
+            "CREATE TABLE IF NOT EXISTS `" + TABLE_FRIENDS + "` (" +
+                    "  `person1` VARCHAR(36) NOT NULL," +
+                    "  `person2` VARCHAR(36) NOT NULL," +
+                    "  `sorted` VARCHAR(73) AS (" +
+                    "    CONCAT(LEAST(`person1`, `person2`), '-', GREATEST(`person1`, `person2`))" +
+                    "  ) STORED INVISIBLE UNIQUE" +
+                    ")";
 
-    private static final String CREATE_TABLE_REQUESTS = "CREATE TABLE IF NOT EXISTS `" + TABLE_REQUESTS + "` (`requester` VARCHAR(36) NOT NULL, `requested` VARCHAR(36) NOT NULL, `sorted` VARCHAR(73) AS (CONCAT(LEAST(`requester`, `requested`), '-', GREATEST(`requester`, `requested`))) STORED INVISIBLE UNIQUE)";
+    private static final String CREATE_TABLE_REQUESTS =
+            "CREATE TABLE IF NOT EXISTS `" + TABLE_REQUESTS + "` (" +
+                    "  `requester` VARCHAR(36) NOT NULL," +
+                    "  `requested` VARCHAR(36) NOT NULL," +
+                    "  `sorted` VARCHAR(73) AS (" +
+                    "    CONCAT(LEAST(`requester`, `requested`), '-', GREATEST(`requester`, `requested`))" +
+                    "  ) STORED INVISIBLE UNIQUE" +
+                    ")";
 
-    private static final String CREATE_ROW_REQUESTS = "INSERT INTO `" + TABLE_REQUESTS + "` (`requester`, `requested`) VALUES (?, ?)";
-    private static final String DELETE_ROW_REQUESTS = "DELETE FROM `" + TABLE_REQUESTS + "` WHERE `requester` = ? AND `requested` = ?";
+    // Anfragen
+    private static final String CREATE_ROW_REQUESTS =
+            "INSERT INTO `" + TABLE_REQUESTS + "` (`requester`, `requested`) VALUES (?, ?)";
+    private static final String DELETE_ROW_REQUESTS_SORTED =
+            "DELETE FROM `" + TABLE_REQUESTS + "` " +
+                    "WHERE sorted = CONCAT(LEAST(?, ?), '-', GREATEST(?, ?))";
 
-    private static final String CREATE_FRIEND = "INSERT INTO `" + TABLE_FRIENDS + "` (`person1`, `person2`) VALUES (?, ?)";
+    // Freunde
+    private static final String CREATE_FRIEND =
+            "INSERT INTO `" + TABLE_FRIENDS + "` (`person1`, `person2`) VALUES (?, ?)";
+    private static final String DELETE_FRIEND =
+            "DELETE FROM `" + TABLE_FRIENDS + "` " +
+                    "WHERE sorted = CONCAT(LEAST(?, ?), '-', GREATEST(?, ?))";
 
-    private static final String DELETE_FRIEND = "DELETE FROM `" + TABLE_FRIENDS + "` " + "WHERE sorted = CONCAT(LEAST(?, ?), '-', GREATEST(?, ?))";
+    // Selects
+    private static final String SELECT_FRIENDS =
+            "SELECT person1, person2 FROM `" + TABLE_FRIENDS + "` " +
+                    "WHERE person1 = ? OR person2 = ?";
 
-    // Liste aller Freunde eines Spielers
-    private static final String SELECT_FRIENDS = "SELECT person1, person2 FROM `" + TABLE_FRIENDS + "` WHERE person1 = ? OR person2 = ?";
+    private static final String SELECT_REQUEST_EXISTS =
+            "SELECT 1 FROM `" + TABLE_REQUESTS + "` " +
+                    "WHERE sorted = CONCAT(LEAST(?, ?), '-', GREATEST(?, ?))";
 
-    // Abfragen für Existenzprüfung (Request/Freundschaft):
-    private static final String SELECT_REQUEST_EXISTS = "SELECT 1 FROM `" + TABLE_REQUESTS + "` " + "WHERE sorted = CONCAT(LEAST(?, ?), '-', GREATEST(?, ?))";
-    private static final String SELECT_FRIENDS_EXISTS = "SELECT 1 FROM `" + TABLE_FRIENDS + "` " + "WHERE sorted = CONCAT(LEAST(?, ?), '-', GREATEST(?, ?))";
+    private static final String SELECT_FRIENDS_EXISTS =
+            "SELECT 1 FROM `" + TABLE_FRIENDS + "` " +
+                    "WHERE sorted = CONCAT(LEAST(?, ?), '-', GREATEST(?, ?))";
 
     public void create() {
-        try (Connection connection = hikariConnection()) {
-            try (Statement statement = connection.createStatement()) { // Schließt danach das Statement
-                statement.execute(CREATE_TABLE_FRIENDS);
-                statement.execute(CREATE_TABLE_REQUESTS);
-            }
+        try (Connection connection = hikariConnection();
+             Statement statement = connection.createStatement()) {
+
+            statement.execute(CREATE_TABLE_FRIENDS);
+            statement.execute(CREATE_TABLE_REQUESTS);
+
         } catch (SQLException e) {
             LOGGER.error("Failed to create default tables", e);
         }
@@ -113,13 +122,15 @@ public class Database {
         return hikariDataSource.getConnection();
     }
 
+    /*
+     * =============================================================================
+     *          Public Methoden (öffnen/schließen eigene Connection)
+     * =============================================================================
+     */
+
     public void addFriendRequest(UUID requester, UUID requested) {
         try (Connection connection = hikariConnection()) {
-            try (PreparedStatement statement = connection.prepareStatement(CREATE_ROW_REQUESTS)) {
-                statement.setString(1, requester.toString());
-                statement.setString(2, requested.toString());
-                statement.execute();
-            }
+            addFriendRequestInternal(connection, requester, requested);
         } catch (SQLException e) {
             LOGGER.error("Failed to add friend request", e);
         }
@@ -127,67 +138,90 @@ public class Database {
 
     public void removeFriendRequest(UUID requester, UUID requested) {
         try (Connection connection = hikariConnection()) {
-            try (PreparedStatement statement = connection.prepareStatement(DELETE_ROW_REQUESTS)) {
-                statement.setString(1, requester.toString());
-                statement.setString(2, requested.toString());
-                statement.execute();
-            }
+            removeFriendRequestInternal(connection, requester, requested);
         } catch (SQLException e) {
             LOGGER.error("Failed to remove friend request", e);
         }
     }
 
-    public void sendRequest(UUID requester, UUID requested) {
-        if (doesFriendshipExist(requester, requested)) {
-            LOGGER.info("sendRequest: {} und {} sind bereits Freunde.", requester, requested);
-            return;
-        }
-
-        if (doesFriendRequestExist(requester, requested)) {
-            LOGGER.info("sendRequest: Request zwischen {} und {} existiert bereits. Akzeptiere automatisch.", requester, requested);
-            acceptRequest(requester, requested);
-            return;
-        }
-
-        addFriendRequest(requester, requested);
-        LOGGER.info("sendRequest: Neue Request von {} an {} wurde erstellt.", requester, requested);
-    }
-
-    public void acceptRequest(UUID requester, UUID requested) {
-        if (!doesFriendRequestExist(requester, requested)) {
-            LOGGER.info("acceptRequest: Es existiert keine Anfrage zwischen {} und {}.", requester, requested);
-            return;
-        }
-        removeFriendRequest(requester, requested);
-        addFriend(requester, requested);
-        LOGGER.info("acceptRequest: Anfrage zwischen {} und {} akzeptiert und als Freundschaft angelegt.", requester, requested);
-    }
-
     public void addFriend(UUID personA, UUID personB) {
-        try (Connection connection = hikariConnection();
-             PreparedStatement statement = connection.prepareStatement(CREATE_FRIEND)) {
-
-            statement.setString(1, personA.toString());
-            statement.setString(2, personB.toString());
-            statement.executeUpdate();
-
+        try (Connection connection = hikariConnection()) {
+            addFriendInternal(connection, personA, personB);
         } catch (SQLException e) {
             LOGGER.error("Failed to add friend", e);
         }
     }
 
     public void removeFriend(UUID personA, UUID personB) {
-        try (Connection connection = hikariConnection();
-             PreparedStatement statement = connection.prepareStatement(DELETE_FRIEND)) {
-
-            statement.setString(1, personA.toString());
-            statement.setString(2, personB.toString());
-            statement.setString(3, personA.toString());
-            statement.setString(4, personB.toString());
-            statement.executeUpdate();
-
+        try (Connection connection = hikariConnection()) {
+            removeFriendInternal(connection, personA, personB);
         } catch (SQLException e) {
             LOGGER.error("Failed to remove friend", e);
+        }
+    }
+
+    /**
+     * sendRequest:
+     * - Prüft, ob die beiden Spieler schon Freunde sind.
+     * - Falls ja, bricht ab.
+     * - Prüft, ob eine bestehende Anfrage (in irgendeiner Richtung) existiert.
+     *      - Falls ja, akzeptiert automatisch (inkl. remove + create).
+     * - Falls nein, wird eine neue Anfrage erstellt.
+     *
+     * Hier verwenden wir nun explizit eine Transaktion.
+     */
+    public void sendRequest(UUID requester, UUID requested) {
+        try (Connection connection = hikariConnection()) {
+            connection.setAutoCommit(false);
+
+            if (doesFriendshipExistInternal(connection, requester, requested)) {
+                LOGGER.info("sendRequest: {} und {} sind bereits Freunde.", requester, requested);
+                connection.rollback();
+                return;
+            }
+
+            if (doesFriendRequestExistInternal(connection, requester, requested)) {
+                LOGGER.info("sendRequest: Request existiert bereits. Akzeptiere automatisch ({} ↔ {}).", requester, requested);
+                acceptRequestInternal(connection, requester, requested);
+                connection.commit();
+                return;
+            }
+
+            // Neue Anfrage anlegen
+            addFriendRequestInternal(connection, requester, requested);
+            LOGGER.info("sendRequest: Neue Request von {} an {} wurde erstellt.", requester, requested);
+
+            connection.commit();
+        } catch (SQLException e) {
+            LOGGER.error("Failed to send friend request", e);
+        }
+    }
+
+    /**
+     * acceptRequest:
+     * - Schaut, ob eine Request in irgendeiner Richtung existiert.
+     * - Falls nicht vorhanden, bricht ab.
+     * - Falls vorhanden, wird die Request gelöscht und die Freundschaft angelegt.
+     *
+     * Ebenfalls als Transaktion.
+     */
+    public void acceptRequest(UUID requester, UUID requested) {
+        try (Connection connection = hikariConnection()) {
+            connection.setAutoCommit(false);
+
+            if (!doesFriendRequestExistInternal(connection, requester, requested)) {
+                LOGGER.info("acceptRequest: Es existiert keine Anfrage zwischen {} und {}.", requester, requested);
+                connection.rollback();
+                return;
+            }
+
+            removeFriendRequestInternal(connection, requester, requested);
+            addFriendInternal(connection, requester, requested);
+            LOGGER.info("acceptRequest: Anfrage zwischen {} und {} akzeptiert.", requester, requested);
+
+            connection.commit();
+        } catch (SQLException e) {
+            LOGGER.error("Failed to accept friend request", e);
         }
     }
 
@@ -196,7 +230,6 @@ public class Database {
         try (Connection connection = hikariConnection();
              PreparedStatement statement = connection.prepareStatement(SELECT_FRIENDS)) {
 
-            // player kann in person1 oder person2 stehen
             statement.setString(1, player.toString());
             statement.setString(2, player.toString());
 
@@ -204,7 +237,6 @@ public class Database {
                 while (rs.next()) {
                     UUID person1 = UUID.fromString(rs.getString("person1"));
                     UUID person2 = UUID.fromString(rs.getString("person2"));
-
                     // Füge den "anderen" Spieler in die Liste
                     if (person1.equals(player)) {
                         friends.add(person2);
@@ -219,42 +251,88 @@ public class Database {
         return friends;
     }
 
-    private boolean doesFriendRequestExist(UUID p1, UUID p2) {
-        try (Connection connection = hikariConnection();
-             PreparedStatement statement = connection.prepareStatement(SELECT_REQUEST_EXISTS)) {
+    /*
+     * =============================================================================
+     *          Interne Methoden (verwenden bestehende Connection)
+     * =============================================================================
+     */
 
+    private void addFriendRequestInternal(Connection connection, UUID requester, UUID requested) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(CREATE_ROW_REQUESTS)) {
+            statement.setString(1, requester.toString());
+            statement.setString(2, requested.toString());
+            statement.executeUpdate();
+        }
+    }
+
+    /**
+     * Entfernt die Friend-Request rein über die Spalte 'sorted'.
+     * Dadurch ist es egal, wer 'requester' und wer 'requested' war.
+     */
+    private void removeFriendRequestInternal(Connection connection, UUID p1, UUID p2) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(DELETE_ROW_REQUESTS_SORTED)) {
             statement.setString(1, p1.toString());
             statement.setString(2, p2.toString());
             statement.setString(3, p1.toString());
             statement.setString(4, p2.toString());
-
-            try (ResultSet rs = statement.executeQuery()) {
-                // Wenn wir etwas zurückbekommen, existiert ein Datensatz
-                return rs.next();
-            }
-        } catch (SQLException e) {
-            LOGGER.error("Failed to check if friend request exists", e);
+            statement.executeUpdate();
         }
-        return false;
     }
 
-    private boolean doesFriendshipExist(UUID p1, UUID p2) {
-        try (Connection connection = hikariConnection();
-             PreparedStatement statement = connection.prepareStatement(SELECT_FRIENDS_EXISTS)) {
+    private void addFriendInternal(Connection connection, UUID personA, UUID personB) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(CREATE_FRIEND)) {
+            statement.setString(1, personA.toString());
+            statement.setString(2, personB.toString());
+            statement.executeUpdate();
+        }
+    }
 
+    private void removeFriendInternal(Connection connection, UUID personA, UUID personB) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(DELETE_FRIEND)) {
+            statement.setString(1, personA.toString());
+            statement.setString(2, personB.toString());
+            statement.setString(3, personA.toString());
+            statement.setString(4, personB.toString());
+            statement.executeUpdate();
+        }
+    }
+
+    /**
+     * Prüft, ob ein Friend-Request (in irgendeiner Richtung) existiert.
+     */
+    private boolean doesFriendRequestExistInternal(Connection connection, UUID p1, UUID p2) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(SELECT_REQUEST_EXISTS)) {
             statement.setString(1, p1.toString());
             statement.setString(2, p2.toString());
             statement.setString(3, p1.toString());
             statement.setString(4, p2.toString());
-
             try (ResultSet rs = statement.executeQuery()) {
-                // Wenn wir etwas zurückbekommen, existiert ein Datensatz
                 return rs.next();
             }
-        } catch (SQLException e) {
-            LOGGER.error("Failed to check if friendship exists", e);
         }
-        return false;
     }
 
+    /**
+     * Prüft, ob eine Freundschaft (in irgendeiner Richtung) existiert.
+     */
+    private boolean doesFriendshipExistInternal(Connection connection, UUID p1, UUID p2) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(SELECT_FRIENDS_EXISTS)) {
+            statement.setString(1, p1.toString());
+            statement.setString(2, p2.toString());
+            statement.setString(3, p1.toString());
+            statement.setString(4, p2.toString());
+            try (ResultSet rs = statement.executeQuery()) {
+                return rs.next();
+            }
+        }
+    }
+
+    /**
+     * Akzeptiert den FriendRequest (wie oben in acceptRequest),
+     * aber ohne eigene Connection/Transaction. Achtung: Nur intern verwenden!
+     */
+    private void acceptRequestInternal(Connection connection, UUID requester, UUID requested) throws SQLException {
+        removeFriendRequestInternal(connection, requester, requested);
+        addFriendInternal(connection, requester, requested);
+    }
 }
