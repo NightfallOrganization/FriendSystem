@@ -26,63 +26,29 @@ public class Database {
     // --------------------------------------------------
     // CREATE-Statements
     // --------------------------------------------------
-    private static final String CREATE_TABLE_FRIENDS =
-            "CREATE TABLE IF NOT EXISTS `" + TABLE_FRIENDS + "` (" +
-                    "  `person1` VARCHAR(36) NOT NULL," +
-                    "  `person2` VARCHAR(36) NOT NULL," +
-                    "  `sorted`  VARCHAR(73) AS (" +
-                    "    CONCAT(LEAST(`person1`, `person2`), '-', GREATEST(`person1`, `person2`))" +
-                    "  ) STORED INVISIBLE UNIQUE" +
-                    ")";
+    private static final String CREATE_TABLE_FRIENDS = """
+            CREATE TABLE IF NOT EXISTS `%1$s`
+            (
+                `person1` VARCHAR(36) NOT NULL,
+                `person2` VARCHAR(36) NOT NULL,
+                `sorted`  VARCHAR(73) AS
+                    (
+                        CONCAT(LEAST(`person1`, `person2`), '-', GREATEST(`person1`, `person2`))
+                    ) STORED INVISIBLE UNIQUE
+            )
+            """.formatted(TABLE_FRIENDS);
 
-    private static final String CREATE_TABLE_REQUESTS =
-            "CREATE TABLE IF NOT EXISTS `" + TABLE_REQUESTS + "` (" +
-                    "  `requester`  VARCHAR(36) NOT NULL," +
-                    "  `requested`  VARCHAR(36) NOT NULL," +
-                    "  `sorted`     VARCHAR(73) AS (" +
-                    "    CONCAT(LEAST(`requester`, `requested`), '-', GREATEST(`requester`, `requested`))" +
-                    "  ) STORED INVISIBLE UNIQUE" +
-                    ")";
-
-    // --------------------------------------------------
-    // Multi-Statement: sendFriendrequest
-    //
-    // Ablauf (A = ?1, B = ?2):
-    //   1) Prüfe, ob sie schon Freunde sind (Eintrag in friends-Tabelle).
-    //   2) Prüfe, ob es eine identische Request (A->B) bereits gibt.
-    //   3) Prüfe, ob es eine entgegengesetzte Request (B->A) bereits gibt.
-    //   4) Falls schon befreundet ODER A->B existiert => "no action"
-    //   5) Falls B->A existiert => Lösche B->A, lege Freundschaft an => "accepted"
-    //   6) Sonst neue Request A->B => "new request"
-    //
-    // Hier werden 14 Platzhalter belegt.
-    // --------------------------------------------------
-    private static final String SQL_SEND_FRIENDREQUEST =
-            "SET @alreadyFriends = ("
-                    + "  SELECT 1 FROM " + TABLE_FRIENDS
-                    + "   WHERE sorted = CONCAT(LEAST(? , ?), '-', GREATEST(? , ?)) "
-                    + "   LIMIT 1"
-                    + ");"
-                    + "SET @hasForward = ("
-                    + "  SELECT 1 FROM " + TABLE_REQUESTS
-                    + "   WHERE requester = ? AND requested = ? "
-                    + "   LIMIT 1"
-                    + ");"
-                    + "SET @hasReverse = ("
-                    + "  SELECT 1 FROM " + TABLE_REQUESTS
-                    + "   WHERE requester = ? AND requested = ? "
-                    + "   LIMIT 1"
-                    + ");"
-                    + "IF (@alreadyFriends IS NOT NULL OR @hasForward IS NOT NULL) THEN "
-                    + "    SELECT 'no action' AS result;"
-                    + "ELSEIF (@hasReverse IS NOT NULL) THEN "
-                    + "    DELETE FROM " + TABLE_REQUESTS + " WHERE requester = ? AND requested = ?;"
-                    + "    INSERT INTO " + TABLE_FRIENDS + " (person1, person2) VALUES (?, ?);"
-                    + "    SELECT 'accepted' AS result;"
-                    + "ELSE "
-                    + "    INSERT INTO " + TABLE_REQUESTS + " (requester, requested) VALUES (?, ?);"
-                    + "    SELECT 'new request' AS result;"
-                    + "END IF;";
+    private static final String CREATE_TABLE_REQUESTS = """
+            CREATE TABLE IF NOT EXISTS `%1$s`
+            (
+                `requester`  VARCHAR(36) NOT NULL,
+                `requested`  VARCHAR(36) NOT NULL,
+                `sorted`     VARCHAR(73) AS
+                    (
+                        CONCAT(LEAST(`requester`, `requested`), '-', GREATEST(`requester`, `requested`))
+                    ) STORED INVISIBLE UNIQUE
+            )
+            """.formatted(TABLE_REQUESTS);
 
     // --------------------------------------------------
     // Multi-Statement: acceptFriendrequest
@@ -115,30 +81,65 @@ public class Database {
     // --------------------------------------------------
     // Einfache Statements:
     // --------------------------------------------------
-    private static final String SQL_ADD_FRIEND =
-            "INSERT INTO " + TABLE_FRIENDS + " (person1, person2) VALUES (?, ?)";
 
-    private static final String SQL_REMOVE_FRIEND =
-            "DELETE FROM " + TABLE_FRIENDS
-                    + " WHERE sorted = CONCAT(LEAST(? , ?), '-', GREATEST(? , ?))";
+    /**
+     * 4 arguments: p1, p2, p1, p2
+     */
+    private static final String SQL_IS_FRIENDS = """
+            SELECT 1 FROM `%1$s` WHERE `sorted` = CONCAT(LEAST(?, ?), '-', GREATEST(?, ?)) LIMIT 1
+            """.formatted(TABLE_FRIENDS);
 
-    private static final String SQL_ADD_REQUEST =
-            "INSERT INTO " + TABLE_REQUESTS + " (requester, requested) VALUES (?, ?)";
+    /**
+     * 2 arguments: requester, requested
+     */
+    private static final String SQL_HAS_REQUEST = """
+            SELECT 1 FROM `%1$s` WHERE `requester` = ? AND `requested` = ? LIMIT 1
+            """.formatted(TABLE_REQUESTS);
 
-    // Reihenfolgenabhängig: requester=? AND requested=?
-    private static final String SQL_REMOVE_REQUEST_EXACT =
-            "DELETE FROM " + TABLE_REQUESTS + " WHERE requester=? AND requested=?";
+    /**
+     * 2 arguments: p1, p2
+     */
+    private static final String SQL_ADD_FRIEND = """
+            INSERT INTO `%1$s` (person1, person2) VALUES (?, ?)
+            """.formatted(TABLE_FRIENDS);
+
+    /**
+     * 2 arguments: requester, requested
+     */
+    private static final String SQL_ADD_REQUEST = """
+            INSERT INTO `%1$s` (requester, requested) VALUES (?, ?)
+            """.formatted(TABLE_REQUESTS);
+
+    /**
+     * 2 arguments: requester,requested
+     */
+    private static final String SQL_REMOVE_REQUEST = """
+            DELETE FROM `%1$s` WHERE requester=? AND requested=?
+            """.formatted(TABLE_REQUESTS);
+
+    /**
+     * 4 arguments: p1, p2, p1, p2
+     */
+    private static final String SQL_REMOVE_FRIEND = """
+            DELETE FROM `%1$s` WHERE sorted = CONCAT(LEAST(? , ?), '-', GREATEST(? , ?))
+            """.formatted(TABLE_FRIENDS);
 
     // --------------------------------------------------
     // Select-Statements:
     // --------------------------------------------------
-    private static final String SQL_GET_FRIENDS =
-            "SELECT person1, person2 FROM " + TABLE_FRIENDS
-                    + " WHERE person1 = ? OR person2 = ?";
+    /**
+     * 2 arguments: p, p
+     */
+    private static final String SQL_GET_FRIENDS = """
+            SELECT `person1`, `person2` FROM `%1$s` WHERE `person1` = ? OR `person2` = ?
+            """.formatted(TABLE_FRIENDS);
 
-    private static final String SQL_GET_REQUESTS =
-            "SELECT requester, requested FROM " + TABLE_REQUESTS
-                    + " WHERE requester = ? OR requested = ?";
+    /**
+     * 2 arguments: p, p
+     */
+    private static final String SQL_GET_REQUESTS = """
+            SELECT `requester`, `requested` FROM `%1$s` WHERE `requester` = ? OR `requested` = ?
+            """.formatted(TABLE_REQUESTS);
 
     // --------------------------------------------------
     // Datenquellen-Handling
@@ -189,7 +190,30 @@ public class Database {
         var database = new Database(DatabaseConfig.DEFAULT);
         database.load();
 
+//        var u1 = UUID.fromString("d0a3478e-c5ad-4d41-858f-eb34273c3932");
+//        var u2 = UUID.fromString("984132b7-9c57-476d-a19c-1b1a33bf12d7");
+        var u1 = UUID.randomUUID();
+        var u2 = UUID.randomUUID();
+
+        System.out.println(database.sendFriendrequest(u1, u2));
+        System.out.println(database.sendFriendrequest(u1, u2));
+        System.out.println(database.sendFriendrequest(u2, u1));
+        System.out.println(database.sendFriendrequest(u2, u1));
+
+        var u3 = UUID.fromString("a6bb6627-0a83-4337-bb25-cf60d4b6c811");
+        var u4 = UUID.fromString("e59fcafd-bf24-48f6-a78d-07bf104d595f");
+
+        System.out.println(database.sendFriendrequest(u3, u4));
+        System.out.println(database.sendFriendrequest(u4, u3));
+
 //        database.removeFriend(UUID.fromString("d9884eb8-c7f6-4929-b54e-bae32e974032"),UUID.fromString("b87e62fb-55ef-4c39-aa80-af41cdcaffba"));
+    }
+
+    private Connection hikariTransaction() throws SQLException {
+        var connection = hikariConnection();
+        connection.setAutoCommit(false);
+        connection.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
+        return connection;
     }
 
     private Connection hikariConnection() throws SQLException {
@@ -217,45 +241,92 @@ public class Database {
      * - Alles in einer Multi-Statement-Query (SQL_SEND_FRIENDREQUEST)
      * - p1 = A, p2 = B
      */
-    public void sendFriendrequest(UUID requester, UUID requested) {
-        try (Connection connection = hikariConnection();
-             PreparedStatement ps = connection.prepareStatement(SQL_SEND_FRIENDREQUEST)) {
+    public RequestResult sendFriendrequest(UUID requester, UUID requested) {
+        var requesterString = requester.toString();
+        var requestedString = requested.toString();
+        Connection connection = null;
+        try {
+            connection = hikariTransaction();
 
-            // 14 Platzhalter in der Reihenfolge:
-            // 1,2,3,4 => alreadyFriends
-            ps.setString(1, requester.toString());
-            ps.setString(2, requested.toString());
-            ps.setString(3, requester.toString());
-            ps.setString(4, requested.toString());
+            boolean alreadyFriends;
+            try (var psIsFriends = connection.prepareStatement(SQL_IS_FRIENDS)) {
+                psIsFriends.setString(1, requesterString);
+                psIsFriends.setString(2, requestedString);
+                psIsFriends.setString(3, requesterString);
+                psIsFriends.setString(4, requestedString);
+                alreadyFriends = psIsFriends.executeQuery().next();
+            }
+            if (alreadyFriends) {
+                connection.rollback();
+                return RequestResult.ALREADY_FRIENDS;
+            }
 
-            // 5,6 => hasForward (A->B)
-            ps.setString(5, requester.toString());
-            ps.setString(6, requested.toString());
+            boolean hasRequest;
+            boolean hasReverse;
+            try (var psHasRequest = connection.prepareStatement(SQL_HAS_REQUEST)) {
+                psHasRequest.setString(1, requesterString);
+                psHasRequest.setString(2, requestedString);
 
-            // 7,8 => hasReverse (B->A)
-            ps.setString(7, requested.toString());
-            ps.setString(8, requester.toString());
+                hasRequest = psHasRequest.executeQuery().next();
+                if (hasRequest) {
+                    connection.rollback();
+                    return RequestResult.ALREADY_SENT;
+                }
 
-            // 9,10 => DELETE B->A
-            ps.setString(9, requested.toString());
-            ps.setString(10, requester.toString());
+                psHasRequest.setString(1, requestedString);
+                psHasRequest.setString(2, requesterString);
+                hasReverse = psHasRequest.executeQuery().next();
+            }
 
-            // 11,12 => INSERT friend (person1, person2)
-            ps.setString(11, requester.toString());
-            ps.setString(12, requested.toString());
+            if (hasReverse) {
+                try (var psRemoveRequest = connection.prepareStatement(SQL_REMOVE_REQUEST); var psAddFriend = connection.prepareStatement(SQL_ADD_FRIEND)) {
+                    psRemoveRequest.setString(1, requestedString);
+                    psRemoveRequest.setString(2, requesterString);
+                    if (psRemoveRequest.executeUpdate() != 1)
+                        throw new SQLException("Failed to remove friend request from " + requestedString + " to " + requesterString);
 
-            // 13,14 => INSERT request (requester, requested)
-            ps.setString(13, requester.toString());
-            ps.setString(14, requested.toString());
+                    psAddFriend.setString(1, requesterString);
+                    psAddFriend.setString(2, requestedString);
+                    if (psAddFriend.executeUpdate() != 1)
+                        throw new SQLException("Failed to add friendship between " + requesterString + " and " + requestedString);
 
-            boolean result = ps.execute();
-            // Wenn du das SELECT '...' AS result auslesen willst,
-            // müsstest du in einer Schleife next() auf die ResultSets gehen.
-            // Hier verwerfen wir das Ergebnis einfach oder protokollieren es optional.
+                    connection.commit();
+                    return RequestResult.ACCEPTED_OUTSTANDING_REQUEST;
+                }
+            }
 
+            try (var psAddRequest = connection.prepareStatement(SQL_ADD_REQUEST)) {
+                psAddRequest.setString(1, requesterString);
+                psAddRequest.setString(2, requestedString);
+                if (psAddRequest.executeUpdate() != 1)
+                    throw new SQLException("Failed to send request from " + requesterString + " to " + requestedString);
+
+                connection.commit();
+                return RequestResult.SENT_REQUEST;
+            }
         } catch (SQLException e) {
             LOGGER.error("Failed to send friend request (SQL)", e);
+            if (connection != null) {
+                try {
+                    connection.rollback();
+                } catch (SQLException ex) {
+                    LOGGER.error("Failed to roll back", ex);
+                }
+            }
+            return RequestResult.FAILED;
+        } finally {
+            if (connection != null) {
+                try {
+                    connection.close();
+                } catch (SQLException e) {
+                    LOGGER.error("Failed to close connection", e);
+                }
+            }
         }
+    }
+
+    public enum RequestResult {
+        ALREADY_SENT, ALREADY_FRIENDS, SENT_REQUEST, ACCEPTED_OUTSTANDING_REQUEST, FAILED
     }
 
     /**
@@ -340,7 +411,7 @@ public class Database {
      */
     public void removeFriendrequest(UUID requester, UUID requested) {
         try (Connection connection = hikariConnection();
-             PreparedStatement ps = connection.prepareStatement(SQL_REMOVE_REQUEST_EXACT)) {
+             PreparedStatement ps = connection.prepareStatement(SQL_REMOVE_REQUEST)) {
 
             ps.setString(1, requester.toString());
             ps.setString(2, requested.toString());
