@@ -189,7 +189,7 @@ public class Database {
         var database = new Database(DatabaseConfig.DEFAULT);
         database.load();
 
-        database.removeFriend(UUID.fromString("d9884eb8-c7f6-4929-b54e-bae32e974032"),UUID.fromString("b87e62fb-55ef-4c39-aa80-af41cdcaffba"));
+//        database.removeFriend(UUID.fromString("d9884eb8-c7f6-4929-b54e-bae32e974032"),UUID.fromString("b87e62fb-55ef-4c39-aa80-af41cdcaffba"));
     }
 
     private Connection hikariConnection() throws SQLException {
